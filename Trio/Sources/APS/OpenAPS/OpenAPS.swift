@@ -222,12 +222,38 @@ final class OpenAPS {
         _ pumpHistoryObjectIDs: [NSManagedObjectID],
         from context: NSManagedObjectContext
     ) -> [PumpEventDTO] {
-        // Load the pump events from the object IDs
+        // Load the pump events from the object IDs (sorted descending by timestamp)
         let pumpHistory: [PumpEventStored] = pumpHistoryObjectIDs
             .compactMap { context.object(with: $0) as? PumpEventStored }
 
+        // Build a set of indices for PumpReplaceComponent events so we can skip them in the main loop
+        // and inject a synthetic suspend before any adjacent resume
+        let replaceComponentType = PumpEventStored.EventType.pumpReplaceComponent.rawValue
+        let resumeType = PumpEventStored.EventType.pumpResume.rawValue
+        var replaceComponentIndices = Set<Int>()
+        var syntheticSuspendBeforeIndices = Set<Int>() // indices of resume events that need a suspend injected
+
+        for (index, event) in pumpHistory.enumerated() {
+            guard event.type == replaceComponentType else { continue }
+            replaceComponentIndices.insert(index)
+
+            // Check the event immediately before (index - 1 = newer, since sorted descending)
+            if index > 0, pumpHistory[index - 1].type == resumeType {
+                syntheticSuspendBeforeIndices.insert(index - 1)
+            }
+            // Check the event immediately after (index + 1 = older, since sorted descending)
+            if index < pumpHistory.count - 1, pumpHistory[index + 1].type == resumeType {
+                syntheticSuspendBeforeIndices.insert(index + 1)
+            }
+        }
+
         // Create the DTOs
-        let dtos: [PumpEventDTO] = pumpHistory.flatMap { event -> [PumpEventDTO] in
+        let dtos: [PumpEventDTO] = pumpHistory.enumerated().flatMap { index, event -> [PumpEventDTO] in
+            // Skip PumpReplaceComponent events from the output
+            if replaceComponentIndices.contains(index) {
+                return []
+            }
+
             var eventDTOs: [PumpEventDTO] = []
             if let bolusDTO = event.toBolusDTOEnum() {
                 eventDTOs.append(bolusDTO)
@@ -250,6 +276,19 @@ final class OpenAPS {
             if let primeDTO = event.toPrimeDTO() {
                 eventDTOs.append(primeDTO)
             }
+
+            // Inject a synthetic suspend immediately before a resume that is adjacent to a replace component
+            if syntheticSuspendBeforeIndices.contains(index),
+               let id = event.id, let timestamp = event.timestamp
+            {
+                let suspendTimestamp = timestamp.addingTimeInterval(-1)
+                let suspendDTO = SuspendDTO(
+                    id: "synthetic_suspend_\(id)",
+                    timestamp: PumpEventStored.dateFormatter.string(from: suspendTimestamp)
+                )
+                eventDTOs.append(.suspend(suspendDTO))
+            }
+
             return eventDTOs
         }
         return dtos

@@ -67,23 +67,16 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                         toIncrement: Double(self.settings.preferences.bolusIncrement)
                     )
 
-                    guard existingEvents.isEmpty else {
-                        // Duplicate found, do not store the event
-                        debug(.coreData, "Duplicate event found with timestamp: \(event.date)")
+                    if let existingEvent = existingEvents.first(where: { $0.type == PumpEvent.bolus.rawValue }) {
+                        if let existingAmount = existingEvent.bolus?.amount, amount < existingAmount as Decimal {
+                            // Update existing event with new smaller value
+                            existingEvent.bolus?.amount = amount as NSDecimalNumber
+                            existingEvent.bolus?.isSMB = dose.automatic ?? true
+                            existingEvent.isUploadedToNS = false
+                            existingEvent.isUploadedToHealth = false
+                            existingEvent.isUploadedToTidepool = false
 
-                        if let existingEvent = existingEvents.first(where: { $0.type == EventType.bolus.rawValue }) {
-                            if existingEvent.timestamp == event.date {
-                                if let existingAmount = existingEvent.bolus?.amount, amount < existingAmount as Decimal {
-                                    // Update existing event with new smaller value
-                                    existingEvent.bolus?.amount = amount as NSDecimalNumber
-                                    existingEvent.bolus?.isSMB = dose.automatic ?? true
-                                    existingEvent.isUploadedToNS = false
-                                    existingEvent.isUploadedToHealth = false
-                                    existingEvent.isUploadedToTidepool = false
-
-                                    debug(.coreData, "Updated existing event with smaller value: \(amount)")
-                                }
-                            }
+                            debug(.coreData, "Updated existing bolus event with smaller value: \(amount)")
                         }
                         continue
                     }
@@ -106,9 +99,8 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                 case .tempBasal:
                     guard let dose = event.dose else { continue }
 
-                    guard existingEvents.isEmpty else {
-                        // Duplicate found, do not store the event
-                        debug(.coreData, "Duplicate event found with timestamp: \(event.date)")
+                    guard !existingEvents.contains(where: { $0.type == PumpEvent.tempBasal.rawValue }) else {
+                        debug(.coreData, "Duplicate tempBasal event found with timestamp: \(event.date)")
                         continue
                     }
 
@@ -135,9 +127,8 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                     newTempBasal.tempType = TempType.absolute.rawValue
 
                 case .suspend:
-                    guard existingEvents.isEmpty else {
-                        // Duplicate found, do not store the event
-                        debug(.coreData, "Duplicate event found with timestamp: \(event.date)")
+                    guard !existingEvents.contains(where: { $0.type == PumpEvent.pumpSuspend.rawValue }) else {
+                        debug(.coreData, "Duplicate suspend event found with timestamp: \(event.date)")
                         continue
                     }
                     let newPumpEvent = PumpEventStored(context: self.context)
@@ -149,9 +140,8 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                     newPumpEvent.isUploadedToTidepool = false
 
                 case .resume:
-                    guard existingEvents.isEmpty else {
-                        // Duplicate found, do not store the event
-                        debug(.coreData, "Duplicate event found with timestamp: \(event.date)")
+                    guard !existingEvents.contains(where: { $0.type == PumpEvent.pumpResume.rawValue }) else {
+                        debug(.coreData, "Duplicate resume event found with timestamp: \(event.date)")
                         continue
                     }
                     let newPumpEvent = PumpEventStored(context: self.context)
@@ -163,9 +153,8 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                     newPumpEvent.isUploadedToTidepool = false
 
                 case .rewind:
-                    guard existingEvents.isEmpty else {
-                        // Duplicate found, do not store the event
-                        debug(.coreData, "Duplicate event found with timestamp: \(event.date)")
+                    guard !existingEvents.contains(where: { $0.type == PumpEvent.rewind.rawValue }) else {
+                        debug(.coreData, "Duplicate rewind event found with timestamp: \(event.date)")
                         continue
                     }
                     let newPumpEvent = PumpEventStored(context: self.context)
@@ -177,9 +166,8 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                     newPumpEvent.isUploadedToTidepool = false
 
                 case .prime:
-                    guard existingEvents.isEmpty else {
-                        // Duplicate found, do not store the event
-                        debug(.coreData, "Duplicate event found with timestamp: \(event.date)")
+                    guard !existingEvents.contains(where: { $0.type == PumpEvent.prime.rawValue }) else {
+                        debug(.coreData, "Duplicate prime event found with timestamp: \(event.date)")
                         continue
                     }
                     let newPumpEvent = PumpEventStored(context: self.context)
@@ -191,9 +179,8 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                     newPumpEvent.isUploadedToTidepool = false
 
                 case .alarm:
-                    guard existingEvents.isEmpty else {
-                        // Duplicate found, do not store the event
-                        debug(.coreData, "Duplicate event found with timestamp: \(event.date)")
+                    guard !existingEvents.contains(where: { $0.type == PumpEvent.pumpAlarm.rawValue }) else {
+                        debug(.coreData, "Duplicate alarm event found with timestamp: \(event.date)")
                         continue
                     }
                     let newPumpEvent = PumpEventStored(context: self.context)
@@ -204,6 +191,23 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
                     newPumpEvent.isUploadedToHealth = false
                     newPumpEvent.isUploadedToTidepool = false
                     newPumpEvent.note = event.title
+
+                case let .replaceComponent(componentType):
+                    let duplicateReplaceComponent = existingEvents.contains {
+                        $0.type == PumpEvent.pumpReplaceComponent.rawValue && $0.note == componentType.rawValue
+                    }
+                    guard !duplicateReplaceComponent else {
+                        debug(.coreData, "Duplicate replaceComponent event found with timestamp: \(event.date)")
+                        continue
+                    }
+                    let newPumpEvent = PumpEventStored(context: self.context)
+                    newPumpEvent.id = UUID().uuidString
+                    newPumpEvent.timestamp = event.date
+                    newPumpEvent.type = PumpEvent.pumpReplaceComponent.rawValue
+                    newPumpEvent.isUploadedToNS = false
+                    newPumpEvent.isUploadedToHealth = false
+                    newPumpEvent.isUploadedToTidepool = false
+                    newPumpEvent.note = componentType.rawValue
 
                 default:
                     continue

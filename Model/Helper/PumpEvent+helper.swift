@@ -58,6 +58,7 @@ public extension PumpEventStored {
         case rewind = "Rewind"
         case prime = "Prime"
         case journalCarbs = "JournalEntryMealMarker"
+        case pumpReplaceComponent = "PumpReplaceComponent"
 
         case nsNote = "Note"
         case nsTempBasal = "Temp Basal"

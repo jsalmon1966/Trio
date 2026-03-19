@@ -70,6 +70,7 @@ enum EventType: String, JSON {
     case rewind = "Rewind"
     case prime = "Prime"
     case journalCarbs = "JournalEntryMealMarker"
+    case pumpReplaceComponent = "PumpReplaceComponent"
 
     case nsTempBasal = "Temp Basal"
     case nsCarbCorrection = "Carb Correction"
