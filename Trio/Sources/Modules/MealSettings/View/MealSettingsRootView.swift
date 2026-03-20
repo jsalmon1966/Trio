@@ -258,7 +258,6 @@ extension MealSettings {
                                     "You can personalize the conversion calculation by adjusting the following settings that will appear when this option is enabled:"
                                 )
                                 Text("• Fat and Protein Delay")
-                                Text("• Maximum Duration")
                                 Text("• Spread Interval")
                                 Text("• Fat and Protein Percentage")
                             }
@@ -315,9 +314,6 @@ extension MealSettings {
                             Text(
                                 "This determines how many minutes will be between individual Fat-Protein Unit Carb Equivalent (FPU) entries from a single Fat and/or Protein bolus calculator entry."
                             )
-                            Text("The shorter the interval, the smoother the correlating dosing result.")
-                            Text("Increasing this setting may result in fewer FPU entries with larger carb values.")
-                            Text("Decreasing this setting may result in more FPU entries with smaller carb values.")
                         }
                     )
 
